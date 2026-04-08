@@ -1,0 +1,9 @@
+// Policy 3: Owners can change document ownership.
+// Cedar: principal.ownedDocuments.contains(resource)
+// Cedar's contains also checks hierarchy descendants.
+policy "owner-change-owner"
+permit
+    action == "changeOwner";
+    var containmentHierarchy = graph.transitiveClosureSet(entityGraph);
+    var resourceAncestors = containmentHierarchy[(resource)];
+    resourceAncestors has any users[(subject)].ownedDocuments;

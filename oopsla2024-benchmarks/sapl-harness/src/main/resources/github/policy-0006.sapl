@@ -1,0 +1,9 @@
+// Policy 5: Users with org read permission can read repos owned by that org.
+// Cedar: principal in resource.owner.readers
+policy "org-read"
+permit
+    action == "read";
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has orgs[(repo.owner)].readers;

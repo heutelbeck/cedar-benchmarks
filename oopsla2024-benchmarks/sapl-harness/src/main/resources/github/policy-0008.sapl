@@ -1,0 +1,9 @@
+// Policy 7: Users with org admin permission.
+// Cedar: principal in resource.owner.admins
+policy "org-admin"
+permit
+    action in ["admin", "maintain", "write", "triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has orgs[(repo.owner)].admins;

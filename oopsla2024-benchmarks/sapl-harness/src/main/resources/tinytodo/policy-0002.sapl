@@ -1,0 +1,9 @@
+// Policy 1: A list's owner can do anything to their list (ABAC - attribute check: resource.owner == principal).
+//
+// Cedar Policy 1 (tinytodo.cedar):
+// permit (principal, action, resource)
+// when { resource has owner && resource.owner == principal };
+
+policy "Policy 1: owner-full-access"
+permit
+    subject == lists[(resource)].owner;

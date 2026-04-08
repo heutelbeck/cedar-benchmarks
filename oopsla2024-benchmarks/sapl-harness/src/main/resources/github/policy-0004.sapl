@@ -1,0 +1,9 @@
+// Policy 3: Users with repo maintain permission.
+// Cedar: principal in resource.maintainers
+policy "repo-maintain"
+permit
+    action in ["maintain", "write", "triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has repo.maintainers;

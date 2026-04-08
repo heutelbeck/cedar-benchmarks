@@ -5,15 +5,14 @@ use cedar_policy_core::{
     authorizer::{AuthorizationError, Decision},
     entities::Entities,
 };
-use entity_graph::OpenEntities;
 use itertools::Itertools;
 use rand::{rngs::ThreadRng, thread_rng, Rng};
 use std::{collections::BTreeMap, time::Duration};
 
 mod apps;
-mod entity_graph;
+pub(crate) mod entity_graph;
 pub use crate::apps::{ExampleApp, TemplateLink};
-mod utils;
+pub(crate) mod utils;
 
 pub mod tinytodo_generator;
 
@@ -25,6 +24,9 @@ pub use openfga_engine::OpenFgaEngine;
 mod rego_engine;
 mod rego_requests;
 pub use rego_engine::RegoEngine;
+pub mod sapl_engine;
+pub mod sapl_requests;
+pub use entity_graph::OpenEntities;
 mod slicing;
 
 pub enum Engine<'a> {
@@ -110,14 +112,11 @@ impl MultiExecutionReport {
 
     /// Add a data point to the report
     pub fn add(&mut self, single_report: SingleExecutionReport) {
-        self.mean_dur_micros
-            .add(f64::try_from(u32::try_from(single_report.dur.as_micros()).unwrap()).unwrap());
-        self.median_dur_micros
-            .add(f64::try_from(u32::try_from(single_report.dur.as_micros()).unwrap()).unwrap());
-        self.p90_dur_micros
-            .add(f64::try_from(u32::try_from(single_report.dur.as_micros()).unwrap()).unwrap());
-        self.p99_dur_micros
-            .add(f64::try_from(u32::try_from(single_report.dur.as_micros()).unwrap()).unwrap());
+        let dur_micros = single_report.dur.as_nanos() as f64 / 1000.0;
+        self.mean_dur_micros.add(dur_micros);
+        self.median_dur_micros.add(dur_micros);
+        self.p90_dur_micros.add(dur_micros);
+        self.p99_dur_micros.add(dur_micros);
         match single_report.decision {
             Decision::Allow => {
                 self.allows.add(1.0);

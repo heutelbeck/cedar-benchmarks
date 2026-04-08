@@ -1,0 +1,20 @@
+// Policy 3: A user can modify a list (UpdateList, CreateTask, UpdateTask, DeleteTask)
+// if they're a member of the list's editors team.
+//
+// Cedar Policy 3 (tinytodo.cedar):
+// permit (
+// principal,
+// action in
+// [Action::"UpdateList",
+// Action::"CreateTask",
+// Action::"UpdateTask",
+// Action::"DeleteTask"],
+// resource
+// )
+// when { principal in resource.editors };
+
+policy "editor-modify"
+permit
+    action in ["UpdateList", "CreateTask", "UpdateTask", "DeleteTask"];
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has lists[(resource)].editors;

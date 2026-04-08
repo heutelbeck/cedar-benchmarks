@@ -1,0 +1,9 @@
+// Policy 0: Users with repo read permission can read.
+// Cedar: principal in resource.readers
+policy "repo-read"
+permit
+    action == "read";
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has repo.readers;

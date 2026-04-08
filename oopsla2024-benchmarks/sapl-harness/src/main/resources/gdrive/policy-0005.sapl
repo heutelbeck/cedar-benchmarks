@@ -1,0 +1,9 @@
+// Policy 4: Folder owners can create documents.
+// Cedar: principal.ownedFolders.contains(resource)
+// Cedar's contains also checks hierarchy descendants.
+policy "folder-owner-create-document"
+permit
+    action == "createDocument";
+    var containmentHierarchy = graph.transitiveClosureSet(entityGraph);
+    var resourceAncestors = containmentHierarchy[(resource)];
+    resourceAncestors has any users[(subject)].ownedFolders;

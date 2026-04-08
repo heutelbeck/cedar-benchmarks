@@ -1,0 +1,9 @@
+// Policy 6: Users with org write permission.
+// Cedar: principal in resource.owner.writers
+policy "org-write"
+permit
+    action in ["write", "triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has orgs[(repo.owner)].writers;

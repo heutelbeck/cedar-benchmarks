@@ -1,0 +1,8 @@
+// Policy 0: View access grants read permission.
+// Cedar: resource in principal.documentsAndFoldersWithViewAccess
+// The View entity is an ancestor of docs/folders in the entity hierarchy.
+policy "view-access-read"
+permit
+    action == "read";
+    var containmentHierarchy = graph.transitiveClosureSet(entityGraph);
+    containmentHierarchy[(resource)] has users[(subject)].documentsAndFoldersWithViewAccess;
