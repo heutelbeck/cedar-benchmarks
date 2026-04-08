@@ -55,8 +55,6 @@ public class SaplHarness {
                 continue;
             }
             var batch   = MAPPER.readTree(line);
-            System.err.println("=== BATCH ===");
-            System.err.println(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(batch));
             var results = processBatch(batch, policies, firstBatch);
             firstBatch = false;
             System.out.println(MAPPER.writeValueAsString(results));
