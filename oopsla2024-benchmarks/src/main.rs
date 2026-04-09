@@ -3,8 +3,10 @@ use cedar_benchmarks::{
     CedarEngine, Engine, ExampleApp, HierarchyStats, MultiExecutionReport, OpenFgaEngine,
     RandomBytes, RegoEngine,
 };
+use cedar_benchmarks::sapl_engine::{SaplEngine, SaplProcess};
+use cedar_benchmarks::OpenEntities;
 use cedar_policy_core::ast::Request;
-use cedar_policy_core::entities::{Entities, EntityJson, TCComputation};
+use cedar_policy_core::entities::{Entities, TCComputation};
 use cedar_policy_core::extensions::Extensions;
 use cedar_policy_core::validator::CoreSchema;
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -115,6 +117,8 @@ pub enum EngineChoice {
     Rego,
     /// Rego authorization engine, pre-compute transitive closure
     RegoPreTC,
+    /// SAPL authorization engine (embedded JVM via subprocess)
+    Sapl,
 }
 
 impl std::fmt::Display for EngineChoice {
@@ -125,6 +129,7 @@ impl std::fmt::Display for EngineChoice {
             Self::CedarOpt => write!(f, "cedaropt"),
             Self::Rego => write!(f, "rego"),
             Self::RegoPreTC => write!(f, "rego_pre_tc"),
+            Self::Sapl => write!(f, "sapl"),
         }
     }
 }
@@ -163,32 +168,40 @@ fn run_experiment(
     };
     let mut hierarchy_stats = HierarchyStats::new();
     let mut multireports: BTreeMap<EngineChoice, MultiExecutionReport> = BTreeMap::new();
+    // SAPL process persists across hierarchies for JVM warmup amortization
+    let use_sapl = common_args.engine.contains(&EngineChoice::Sapl);
+    let mut sapl_process = if use_sapl {
+        Some(SaplProcess::new(&app.name))
+    } else {
+        None
+    };
     (1..=common_args.num_hierarchies).for_each(|_| {
         let (entities, links) = (app.bespoke_generator)(&app.validator_schema(), num_entities);
         let mut num_openfga_tuples = 0;
-        let engines = common_args.engine.iter().map(|choice| match choice {
+        let engines: Vec<_> = common_args.engine.iter().filter_map(|choice| match choice {
             EngineChoice::Cedar => {
                 let engine = CedarEngine::new(&entities, &links, &app);
-                (choice, Engine::Cedar(engine))
+                Some((choice, Engine::Cedar(engine)))
             },
             EngineChoice::CedarOpt => {
                 let engine = CedarOptEngine::new(&entities, &links, &app);
-                (choice, Engine::CedarOpt(engine))
+                Some((choice, Engine::CedarOpt(engine)))
             }
             EngineChoice::OpenFGA => {
                 let engine = OpenFgaEngine::new(&entities, links.clone(), &app);
-                num_openfga_tuples = engine.num_tuples(); // overwrite the previous value. This means we'll only get the latest value but that's fine
-                (choice, Engine::OpenFga(engine))
+                num_openfga_tuples = engine.num_tuples();
+                Some((choice, Engine::OpenFga(engine)))
             },
             EngineChoice::Rego => {
                 let engine = RegoEngine::new(&app, &entities);
-                (choice, Engine::Rego(engine))
+                Some((choice, Engine::Rego(engine)))
             },
             EngineChoice::RegoPreTC => {
                 let engine = RegoEngine::new(&app, &entities);
-                (choice, Engine::RegoTC(engine))
-            }
-        });
+                Some((choice, Engine::RegoTC(engine)))
+            },
+            EngineChoice::Sapl => None, // handled separately below
+        }).collect();
         let cedar_entities = Entities::from_entities(
             entities.clone(),
             Some(&CoreSchema::new(&app.validator_schema())),
@@ -223,51 +236,52 @@ fn run_experiment(
         };
         // The "decision sequence" of each engine is the allow/deny sequence, which we assert needs to be the same for each engine else we're doing something wrong. (The engines should have the same allow/deny behavior.)
         let mut decision_sequences: Vec<Vec<_>> = Vec::new();
+        let mut engine_names: Vec<EngineChoice> = Vec::new();
         for (choice, engine) in engines {
             let mreport = multireports.entry(*choice).or_insert_with(MultiExecutionReport::new);
             decision_sequences.push(Vec::with_capacity(requests.len()));
+            engine_names.push(*choice);
             let decision_sequence = decision_sequences.last_mut().expect("just pushed, so there should be a last element");
             for sreport in engine.execute(requests.clone()) {
                 decision_sequence.push(sreport.decision);
                 mreport.add(sreport);
             }
         }
-        let report_decision_mismatch = |request, engine_1, decision_1, engine_2, decision_2| {
-            let entities: Vec<EntityJson> = entities.iter().map(|e| EntityJson::from_entity(e).unwrap()).collect();
-            serde_json::to_writer_pretty(std::io::stderr(), &entities).unwrap();
-            panic!("Decision mismatch for {request}: {engine_1} gave {decision_1:?} but {engine_2} gave {decision_2:?}");
-        };
-        match decision_sequences.len() {
-            0 => panic!("expected at least 1 decision sequence"),
-            1 => {} // nothing to do, only testing one engine
-            2 => {
-                for ((request, decision_1), decision_2) in requests.iter().zip(decision_sequences[0].iter()).zip(decision_sequences[1].iter()) {
-                    if decision_1 != decision_2 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[1], decision_2);
+        // SAPL engine: uses persistent process, executed after other engines
+        if let Some(ref mut process) = sapl_process {
+            let sapl_engine: SaplEngine<'_, OpenEntities> = SaplEngine::new(&app, &entities);
+            let mreport = multireports.entry(EngineChoice::Sapl).or_insert_with(MultiExecutionReport::new);
+            decision_sequences.push(Vec::with_capacity(requests.len()));
+            engine_names.push(EngineChoice::Sapl);
+            let decision_sequence = decision_sequences.last_mut().unwrap();
+            for sreport in sapl_engine.execute(requests.clone(), process) {
+                decision_sequence.push(sreport.decision);
+                mreport.add(sreport);
+            }
+        }
+        // Validate all engines agree on decisions
+        if decision_sequences.len() >= 2 {
+            for (req_idx, request) in requests.iter().enumerate() {
+                let first_decision = &decision_sequences[0][req_idx];
+                for seq_idx in 1..decision_sequences.len() {
+                    if decision_sequences[seq_idx][req_idx] != *first_decision {
+                        eprintln!("=== DECISION MISMATCH ===");
+                        for (i, req) in requests.iter().enumerate() {
+                            let decisions: Vec<_> = decision_sequences.iter()
+                                .map(|seq| format!("{:?}", seq[i]))
+                                .collect();
+                            let marker = if i == req_idx { " <-- MISMATCH" } else { "" };
+                            eprintln!("  req[{}] {} -> [{}]{}", i, req, decisions.join(", "), marker);
+                        }
+                        panic!(
+                            "Decision mismatch for {request}: {} gave {first_decision:?} but {} gave {:?}",
+                            engine_names[0], engine_names[seq_idx], decision_sequences[seq_idx][req_idx]
+                        );
                     }
                 }
             }
-            3 => {
-                for (((request, decision_1), decision_2), decision_3) in requests.iter().zip(decision_sequences[0].iter()).zip(decision_sequences[1].iter()).zip(decision_sequences[2].iter()) {
-                    if decision_1 != decision_2 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[1], decision_2);
-                    } else if decision_1 != decision_3 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[2], decision_3);
-                    }
-                }
-            }
-            4 => {
-                for ((((request, decision_1), decision_2), decision_3), decision_4) in requests.iter().zip(decision_sequences[0].iter()).zip(decision_sequences[1].iter()).zip(decision_sequences[2].iter()).zip(decision_sequences[3].iter()) {
-                    if decision_1 != decision_2 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[1], decision_2);
-                    } else if decision_1 != decision_3 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[2], decision_3);
-                    } else if decision_1 != decision_4 {
-                        report_decision_mismatch(request, common_args.engine[0], decision_1, common_args.engine[3], decision_4);
-                    }
-                }
-            }
-            _ => unimplemented!()
+        } else if decision_sequences.is_empty() {
+            panic!("expected at least 1 decision sequence");
         }
         hierarchy_stats.add(&cedar_entities, num_openfga_tuples);
     });

@@ -1,0 +1,9 @@
+// Policy 1: Users with repo triage permission can triage and read.
+// Cedar: principal in resource.triagers (action hierarchy includes read)
+policy "repo-triage"
+permit
+    action in ["triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has repo.triagers;

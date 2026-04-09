@@ -1,0 +1,11 @@
+// Policy 2: Owners can read, write, and share their docs/folders.
+// Cedar: resource in principal.ownedDocuments || resource in principal.ownedFolders
+// Cedar's "in" traverses the entity hierarchy, so owning a folder
+// grants access to all documents inside it.
+policy "owner-read-write-share"
+permit
+    action in ["read", "write", "share"];
+    var user = users[(subject)];
+    var containmentHierarchy = graph.transitiveClosureSet(entityGraph);
+    var resourceAncestors = containmentHierarchy[(resource)];
+    resourceAncestors has any user.ownedFolders || resourceAncestors has any user.ownedDocuments;

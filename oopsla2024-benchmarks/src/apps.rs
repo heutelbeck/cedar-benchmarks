@@ -238,20 +238,7 @@ impl ExampleApp {
             )
         }))
         .expect("failed to parse schema");
-        let settings = ABACSettings {
-            match_types: true,
-            enable_extensions: true,
-            max_depth: 3,
-            max_width: 3,
-            enable_additional_attributes: true,
-            enable_like: true,
-            enable_action_groups_and_attrs: true,
-            enable_arbitrary_func_call: false,
-            enable_unknowns: false,
-            enable_action_in_constraints: false,
-            per_action_request_env_limit: ABACSettings::default_per_action_request_env_limit(),
-            total_action_request_env_limit: ABACSettings::default_total_action_request_env_limit(),
-        };
+        let settings = ABACSettings::type_directed();
         #[allow(deprecated)]
         GeneratorSchema::from_raw_schemafrag(schema, settings, u)
             .expect("failed to generate schema")
@@ -345,7 +332,7 @@ fn separate_process_bespoke_generator(
         let parse_euid_json = |val: serde_json::Value| -> EntityUID {
             let euidjson: EntityUidJson = serde_json::from_value(val).expect("uid should be valid");
             euidjson
-                .into_euid(|| JsonDeserializationErrorContext::EntityUid)
+                .into_euid(&|| JsonDeserializationErrorContext::EntityUid)
                 .expect("uid should be valid")
         };
         let links = links

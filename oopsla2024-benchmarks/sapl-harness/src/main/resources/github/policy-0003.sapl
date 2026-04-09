@@ -1,0 +1,9 @@
+// Policy 2: Users with repo write permission can write, triage, and read.
+// Cedar: principal in resource.writers
+policy "repo-write"
+permit
+    action in ["write", "triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has repo.writers;

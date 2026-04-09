@@ -1,0 +1,6 @@
+// Policy 1: Public documents can be read by anyone.
+// Cedar: resource.isPublic
+policy "public-read"
+permit
+    action == "read";
+    docs[(resource)].isPublic == true;

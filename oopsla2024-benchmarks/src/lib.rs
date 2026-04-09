@@ -5,7 +5,6 @@ use cedar_policy_core::{
     authorizer::{AuthorizationError, Decision},
     entities::Entities,
 };
-use entity_graph::OpenEntities;
 use itertools::Itertools;
 use rand::{rngs::ThreadRng, thread_rng, Rng};
 use std::{collections::BTreeMap, time::Duration};
@@ -25,7 +24,11 @@ pub use openfga_engine::OpenFgaEngine;
 mod rego_engine;
 mod rego_requests;
 pub use rego_engine::RegoEngine;
+pub mod sapl_engine;
+mod sapl_requests;
 mod slicing;
+
+pub use entity_graph::OpenEntities;
 
 pub enum Engine<'a> {
     Cedar(CedarEngine),
@@ -110,18 +113,11 @@ impl MultiExecutionReport {
 
     /// Add a data point to the report
     pub fn add(&mut self, single_report: SingleExecutionReport) {
-        self.mean_dur_micros.add(f64::from(
-            u32::try_from(single_report.dur.as_micros()).unwrap(),
-        ));
-        self.median_dur_micros.add(f64::from(
-            u32::try_from(single_report.dur.as_micros()).unwrap(),
-        ));
-        self.p90_dur_micros.add(f64::from(
-            u32::try_from(single_report.dur.as_micros()).unwrap(),
-        ));
-        self.p99_dur_micros.add(f64::from(
-            u32::try_from(single_report.dur.as_micros()).unwrap(),
-        ));
+        let dur_micros = single_report.dur.as_nanos() as f64 / 1000.0;
+        self.mean_dur_micros.add(dur_micros);
+        self.median_dur_micros.add(dur_micros);
+        self.p90_dur_micros.add(dur_micros);
+        self.p99_dur_micros.add(dur_micros);
         match single_report.decision {
             Decision::Allow => {
                 self.allows.add(1.0);

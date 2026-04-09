@@ -1,0 +1,7 @@
+// Policy 3: Owners can change document ownership.
+// Cedar: principal.ownedDocuments.contains(resource)
+// Cedar's .contains() is plain set membership (no hierarchy traversal).
+policy "owner-change-owner"
+permit
+    action == "changeOwner";
+    resource in users[(subject)].ownedDocuments;

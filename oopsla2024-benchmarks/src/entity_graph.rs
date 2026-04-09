@@ -2,7 +2,7 @@ use cedar_policy_core::{
     entities::{Entities, NoEntitiesSchema},
     extensions::Extensions,
 };
-use cedar_policy_generators::collections::HashMap;
+use std::collections::HashMap;
 
 pub trait EntityGraph {
     fn from_iter<'a>(i: impl IntoIterator<Item = &'a cedar_policy_core::ast::Entity>) -> Self;

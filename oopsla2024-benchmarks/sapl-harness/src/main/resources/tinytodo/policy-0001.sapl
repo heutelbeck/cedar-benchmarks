@@ -1,0 +1,14 @@
+// Policy 0: Any user can create a new list or see their own lists.
+// These are app-level actions (CreateList, GetLists) against the Application resource.
+//
+// Cedar Policy 0 (tinytodo.cedar):
+// permit (
+// principal,
+// action in [Action::"CreateList", Action::"GetLists"],
+// resource == Application::"TinyTodo"
+// );
+
+policy "create-and-get-lists"
+permit
+    action in ["CreateList", "GetLists"];
+    resource == "Application::TinyTodo";

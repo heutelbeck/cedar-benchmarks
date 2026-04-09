@@ -1,0 +1,9 @@
+// Policy 4: Users with repo admin permission.
+// Cedar: principal in resource.admins
+policy "repo-admin"
+permit
+    action in ["admin", "maintain", "write", "triage", "read"];
+    var repo = repos[(resource)];
+    repo != undefined;
+    var memberOf = graph.transitiveClosureSet(entityGraph);
+    memberOf[(subject)] has repo.admins;
