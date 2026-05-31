@@ -16,7 +16,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <sapl.version>4.0.0-SNAPSHOT</sapl.version>
+        <sapl.version>4.0.0</sapl.version>
     </properties>
 
     <dependencies>
