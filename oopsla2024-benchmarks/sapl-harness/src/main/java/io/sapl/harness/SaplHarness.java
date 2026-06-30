@@ -11,15 +11,15 @@ import io.sapl.api.model.Value;
 import io.sapl.api.model.ValueJsonMarshaller;
 import io.sapl.api.model.jackson.SaplJacksonModule;
 import io.sapl.api.pdp.AuthorizationSubscription;
-import io.sapl.api.pdp.CombiningAlgorithm;
-import io.sapl.api.pdp.CombiningAlgorithm.DefaultDecision;
-import io.sapl.api.pdp.CombiningAlgorithm.ErrorHandling;
-import io.sapl.api.pdp.CombiningAlgorithm.VotingMode;
 import io.sapl.api.pdp.Decision;
-import io.sapl.api.pdp.PDPConfiguration;
-import io.sapl.api.pdp.PdpData;
+import io.sapl.api.pdp.configuration.CombiningAlgorithm;
+import io.sapl.api.pdp.configuration.CombiningAlgorithm.DefaultDecision;
+import io.sapl.api.pdp.configuration.CombiningAlgorithm.ErrorHandling;
+import io.sapl.api.pdp.configuration.CombiningAlgorithm.VotingMode;
+import io.sapl.api.pdp.configuration.PDPConfiguration;
+import io.sapl.api.pdp.configuration.PdpData;
+import io.sapl.pdp.PDPComponents;
 import io.sapl.pdp.PolicyDecisionPointBuilder;
-import io.sapl.pdp.PolicyDecisionPointBuilder.PDPComponents;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -80,7 +80,7 @@ public class SaplHarness {
                 var warmupDeadline = System.nanoTime() + 15_000_000_000L;
                 while (System.nanoTime() < warmupDeadline) {
                     for (var sub : subscriptions) {
-                        pdp.decideOnceBlocking(sub);
+                        pdp.decideOnce(sub);
                     }
                 }
                 System.err.println("Warmup complete.");
@@ -90,14 +90,14 @@ public class SaplHarness {
             var results = new ArrayList<TestOutput>(subscriptions.size());
             for (var sub : subscriptions) {
                 var start    = System.nanoTime();
-                var decision = pdp.decideOnceBlocking(sub);
+                var decision = pdp.decideOnce(sub);
                 var dur      = System.nanoTime() - start;
                 results.add(new TestOutput(decision.decision() == Decision.PERMIT, dur));
             }
             return results;
         } finally {
             if (components != null) {
-                components.dispose();
+                components.close();
             }
         }
     }
